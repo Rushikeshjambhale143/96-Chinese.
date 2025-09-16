@@ -1,0 +1,619 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>QR Menu & Order (Demo) — Fixed Scanner Load</title>
+  <style>
+    :root{
+      --accent:#e76f51;
+      --muted:#666;
+      --bg-light:#f7f7f8;
+      --bg-dark:#23232b;
+      --text-light:#222;
+      --text-dark:#f7f7f8;
+      --card-light:#fff;
+      --card-dark:#2d2d39;
+    }
+    body{
+      font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;
+      margin:0;
+      background:var(--bg-light);
+      color:var(--text-light);
+      transition:background 0.3s,color 0.3s;
+    }
+    body.theme-dark{
+      background:var(--bg-dark);
+      color:var(--text-dark);
+    }
+    header{background:#fff;padding:16px 20px;box-shadow:0 1px 4px rgba(0,0,0,0.06);display:flex;align-items:center;justify-content:space-between}
+    body.theme-dark header{background:var(--card-dark);}
+    .brand{font-weight:700}
+    .container{max-width:1100px;margin:24px auto;padding:0 20px}
+    .grid{display:grid;grid-template-columns:360px 1fr;gap:20px}
+    .card{
+      background:var(--card-light);
+      padding:20px;
+      border-radius:10px;
+      box-shadow:0 4px 14px rgba(18,20,28,0.06)
+    }
+    body.theme-dark .card{background:var(--card-dark);}
+
+    /* QR reader box */
+    #reader{
+      width:100%;
+      height:320px;
+      background:#000 url('https://cdn.discordapp.com/attachments/1415629929101525055/1417455538135892008/PHOTO-2025-09-16-13-27-43.jpg?ex=68ca8bd7&is=68c93a57&hm=c406a8e4fa1fd94ffd361896e53047bfe3fa190ddc26d568aa558a345c409df4&') center center/cover no-repeat;
+      border-radius:8px;
+      overflow:hidden;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color:#fff;
+      position:relative;
+    }
+    .small{font-size:13px;color:var(--muted)}
+    .status{font-size:13px;padding:8px;border-radius:6px}
+
+    /* Menu */
+    .menu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+    .menu-item{display:flex;gap:12px;align-items:center;border:1px solid #f0f0f0;padding:10px;border-radius:8px}
+    .menu-item img{width:64px;height:64px;object-fit:cover;border-radius:6px}
+    .menu-item .meta{flex:1}
+    .btn{background:var(--accent);color:white;padding:8px 12px;border-radius:8px;border:none;cursor:pointer}
+    .btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+
+    /* Cart */
+    .cart-list{list-style:none;margin:0;padding:0}
+    .cart-list li{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed #eee}
+
+  footer{padding:12px 20px;text-align:center;color:#888}
+  body.theme-dark footer{color:#aaa;}
+
+    /* Responsive */
+    @media (max-width:900px){.grid{grid-template-columns:1fr}#reader{height:240px}}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand" style="display:flex;align-items:center;gap:10px;">
+      <img src="https://cdn-icons-png.flaticon.com/512/3075/3075977.png" alt="Logo" style="width:36px;height:36px;vertical-align:middle;" />
+      96 चायानज
+    </div>
+    <div style="display:flex;align-items:center;gap:16px;">
+      <div class="small">Scan table QR → Open menu → Order</div>
+      <button id="theme-toggle" class="btn ghost" style="font-size:18px;padding:6px 12px;min-width:40px;" title="Toggle theme">🌙</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="grid">
+      <!-- Left: QR Scanner + Table info + Kitchen orders -->
+      <div>
+        <div class="card">
+          <h3>1) QR Scanner</h3>
+          <div id="reader">Scanner idle</div>
+          <p class="small">Scan the QR code on the table. Example QR payload: <code>TABLE_1</code> or a URL that contains table id.</p>
+
+          <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+            <button id="start-scan" class="btn">Start Scanner</button>
+            <button id="stop-scan" class="btn ghost">Stop</button>
+            <div id="table-info" style="margin-left:auto;font-weight:600">No table</div>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+            <div class="status small" id="lib-status">QR library: <strong>not loaded</strong></div>
+            <button id="preload-lib" class="btn ghost">Load QR library</button>
+          </div>
+
+          <!-- Simulation / test helpers -->
+          <div style="margin-top:12px">
+            <label class="small">Simulate scan (for testing):</label>
+            <div style="display:flex;gap:8px;margin-top:6px">
+              <input id="simulate-input" placeholder="TABLE_1 or https://site/?table=TABLE_1" style="flex:1;padding:8px;border-radius:6px;border:1px solid #ddd" />
+              <button id="simulate-scan" class="btn">Simulate</button>
+            </div>
+            <div class="small" style="margin-top:8px;color:#444">If camera isn't available, use simulate to test flows.</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:16px;">
+          <h3>Kitchen (Simulated)</h3>
+          <div class="small">Orders placed will appear here (stored in localStorage).</div>
+          <ul id="kitchen-orders" style="margin-top:10px;padding-left:0"></ul>
+          <button id="clear-orders" class="btn ghost" style="margin-top:10px">Clear Orders</button>
+        </div>
+      </div>
+
+      <!-- Right: Menu & Cart -->
+      <div>
+
+        <div class="card">
+          <h3>Veg</h3>
+          <div id="menu-root-veg" class="menu-grid"></div>
+        </div>
+
+        <div class="card" style="margin-top:16px;">
+          <h3>Non Veg</h3>
+          <div id="menu-root-nonveg" class="menu-grid"></div>
+        </div>
+
+        <div class="card" style="margin-top:16px">
+          <h3>3) Cart</h3>
+          <ul id="cart" class="cart-list"></ul>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
+            <div><strong>Total:</strong> ₹<span id="total">0</span></div>
+            <div>
+              <button id="place-order" class="btn">Place Order</button>
+              <button id="empty-cart" class="btn ghost">Empty</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;">
+      <img src="https://cdn-icons-png.flaticon.com/512/1046/1046784.png" alt="Food" style="width:48px;height:48px;opacity:0.7;" />
+      <span>Demo — No backend. Orders are saved to localStorage as simulation.</span>
+    </div>
+  </footer>
+
+  <script>
+    // --- Theme Switcher ---
+    function setTheme(theme) {
+      document.body.classList.toggle('theme-dark', theme === 'dark');
+      localStorage.setItem('theme', theme);
+      document.getElementById('theme-toggle').textContent = theme === 'dark' ? '☀️' : '🌙';
+    }
+    function toggleTheme() {
+      const isDark = document.body.classList.contains('theme-dark');
+      setTheme(isDark ? 'light' : 'dark');
+    }
+    // On load, set theme from localStorage
+    (function(){
+      const theme = localStorage.getItem('theme') || 'light';
+      setTheme(theme);
+    })();
+    document.addEventListener('DOMContentLoaded', function() {
+      document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+    });
+    // ---------------------
+    // Configuration
+    // ---------------------
+    const HTML5_QR_CDN = 'https://unpkg.com/html5-qrcode@2.3.7/minified/html5-qrcode.min.js';
+
+    // --- Demo menu data (replace with server data in real app) ---
+    const MENU = [
+      {
+        id: "veg Crispy",
+        name: "veg Crispy",
+        price_half: 200,
+        price_full: 200,
+        category: "Non Veg Starter",
+        img: "https://img-cdn.publive.online/fit-in/1280x960/filters:format(webp)/sanjeev-kapoor/media/post_banners/710fa9dd5f36bc478a6f7b0ff17450c7504557dcce2d61b2b885f9f7c97fbf39.jpg"
+      },
+      {
+        id: "lollipop_oil",
+        name: "Lollipop Oil Fry",
+        price_half: 100,
+        price_full: 170,
+        category: "Non Veg Starter",
+        img: "https://images.unsplash.com/photo-1519864600265-abb23847ef2c?auto=format&fit=crop&w=200&q=80"
+      },
+      {
+        id: "veg_manchurian",
+        name: "Veg Manchurian",
+        price_half: 100,
+        price_full: 160,
+        category: "Veg Starter",
+        img: "https://images.unsplash.com/photo-1502741338009-cac2772e18bc?auto=format&fit=crop&w=200&q=80"
+      },
+      {
+        id: "paneer_hk",
+        name: "Paneer Hong Kong Dry",
+        price_half: 120,
+        price_full: 170,
+        category: "Paneer Special",
+        img: "https://images.unsplash.com/photo-1523987355523-c7b5b0723c6a?auto=format&fit=crop&w=200&q=80"
+      },
+      {
+        id: "egg_fried",
+        name: "Egg Fried Rice",
+        price_half: 90,
+        price_full: 120,
+        category: "Egg Rice",
+        img: "https://images.unsplash.com/photo-1504674900247-ec6b0b1b798e?auto=format&fit=crop&w=200&q=80"
+      },
+      {
+        id: "veg_fried",
+        name: "Veg Fried Rice",
+        price_half: 90,
+        price_full: 120,
+        category: "Veg Rice",
+        img: "https://images.unsplash.com/photo-1464306076886-debca5e8a6b0?auto=format&fit=crop&w=200&q=80"
+      }
+        // New Veg Menu Items
+          ,
+    { id: "veg_crispy", name: "Veg Crispy", price_half: 200, price_full: null, category: "Veg Starter", img: "https://images.unsplash.com/photo-1502741338009-cac2772e18bc?auto=format&fit=crop&w=200&q=80" },
+    { id: "veg_manchurian_dry", name: "Veg Manchurian Dry", price_half: 100, price_full: 160, category: "Veg Starter", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRgHJIfFAjPcUc-ZGPqYHZ46Zy9Znhig-XBlA&s" },
+    { id: "veg_manchurian_gravy", name: "Veg Manchurian Gravy", price_half: 110, price_full: 170, category: "Veg Starter", img: "https://gurujikirasoi.com/wp-content/uploads/2025/04/Veg-Manchurian-Gravy.png" },
+    { id: "paneer_chilli_dry", name: "Paneer Chilli Dry", price_half: 110, price_full: 170, category: "Veg Starter", img: "https://www.indianhealthyrecipes.com/wp-content/uploads/2022/02/chilli-paneer-recipe.jpg" },
+    { id: "paneer_chilli_gravy", name: "Paneer Chilli Gravy", price_half: 120, price_full: 180, category: "Veg Starter", img: "https://thewhiskaddict.com/wp-content/uploads/2024/03/IMG_0025-3-scaled.jpg" },
+    { id: "paneer_65", name: "Paneer 65", price_half: 120, price_full: 180, category: "Veg Starter", img: "https://sinfullyspicy.com/wp-content/uploads/2024/11/3-3.jpg" },
+    { id: "paneer_manchurian_dry", name: "Paneer Manchurian Dry", price_half: 110, price_full: 170, category: "Veg Starter", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS9jNgguU6Jb6Jvw0_9oxVCIVxBP3rDM2neeg&s" },
+    { id: "paneer_manchurian_gravy", name: "Paneer Manchurian Gravy", price_half: 120, price_full: 180, category: "Veg Starter", img: "https://i.ytimg.com/vi/fJB-qnWQMDE/hq720.jpg?sqp=-oaymwEhCK4FEIIDSFryq4qpAxMIARUAAAAAGAElAADIQj0AgKJD&rs=AOn4CLB-QxSeWycWbX_O0xrD_hmSc1aQ6w" },
+    { id: "paneer_hk_dry", name: "Paneer Hong Kong Dry", price_half: 120, price_full: 170, category: "Veg Starter", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRvF9VZLfUp1165DoBmh_AMZ_VtucN9yv2HEQ&s" },
+    { id: "paneer_schezwan_dry", name: "Paneer Schezwan Dry", price_half: 120, price_full: 170, category: "Veg Starter", img: "https://www.cookwithmanali.com/wp-content/uploads/2023/05/Schezwan-Paneer.jpg" },
+    { id: "paneer_crispy", name: "Paneer Crispy", price_half: 220, price_full: null, category: "Veg Starter", img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTBhcGrDjz1C6EyQwsUGKDpSWVEVR5XCnVKRQ&s" },
+
+        // VEG RICE
+        { id: "special_rice", name: "96 Special Rice", price_half: 319, price_full: null, category: "Veg Rice", img: "https://twoplaidaprons.com/wp-content/uploads/2023/08/house-special-fried-rice-on-a-plate-thumbnail.jpg"  },
+        { id: "veg_fried_rice", name: "Veg Fried Rice", price_half: 90, price_full: 120, category: "Veg Rice", img: "https://images.unsplash.com/photo-1502741338009-cac2772e18bc?auto=format&fit=crop&w=200&q=80" },
+        { id: "veg_schezwan_rice", name: "Veg Schezwan Rice", price_half: 100, price_full: 140, category: "Veg Rice", img: "https://images.unsplash.com/photo-1502741338009-cac2772e18bc?auto=format&fit=crop&w=200&q=80" },
+        { id: "veg_triple_rice", name: "Veg Triple Rice", price_half: 110, price_full: 170, category: "Veg Rice" },
+        { id: "veg_manchurian_rice", name: "Veg Manchurian Rice", price_half: 100, price_full: 160, category: "Veg Rice" },
+        { id: "veg_hong_kong_rice", name: "Veg Hong Kong Rice", price_half: 110, price_full: 160, category: "Veg Rice" },
+        { id: "veg_singapuri_rice", name: "Veg Singapuri Rice", price_half: 110, price_full: 160, category: "Veg Rice" },
+        { id: "veg_combination_rice", name: "Veg Combination Rice", price_half: 100, price_full: 140, category: "Veg Rice" },
+        { id: "veg_chopper_rice", name: "Veg Chopper Rice", price_half: 120, price_full: 200, category: "Veg Rice" },
+        { id: "veg_sherpa_rice", name: "Veg Sherpa Rice", price_half: 200, price_full: null, category: "Veg Rice" },
+
+        // VEG NOODLE
+        { id: "special_noodle", name: "96 Special Noodle", price_half: 319, price_full: null, category: "Veg Noodle", img: "https://cdn.discordapp.com/attachments/1415629929101525055/1417478668392857740/PHOTO-2025-09-16-13-27-13.jpg?ex=68caa162&is=68c94fe2&hm=35fd2170503a7f8e7126794e3968e993a6dc4ff8fc560f6ce48956f03ed15e8d&" },
+        { id: "veg_hakka_noodle", name: "Veg Hakka Noodle", price_half: 90, price_full: 120, category: "Veg Noodle" },
+        { id: "veg_schezwan_noodle", name: "Veg Schezwan Noodle", price_half: 100, price_full: 140, category: "Veg Noodle" },
+        { id: "veg_triple_noodle", name: "Veg Triple Noodle", price_half: 110, price_full: 170, category: "Veg Noodle" },
+        { id: "veg_manchurian_noodle", name: "Veg Manchurian Noodle", price_half: 100, price_full: 160, category: "Veg Noodle" },
+        { id: "veg_hong_kong_noodle", name: "Veg Hong Kong Noodle", price_half: 110, price_full: 160, category: "Veg Noodle" },
+        { id: "veg_singapuri_noodle", name: "Veg Singapuri Noodle", price_half: 110, price_full: 170, category: "Veg Noodle" },
+        { id: "veg_chopper_noodle", name: "Veg Chopper Noodle", price_half: 120, price_full: 200, category: "Veg Noodle" },
+        { id: "veg_sherpa_noodle", name: "Veg Sherpa Noodle", price_half: 200, price_full: null, category: "Veg Noodle" },
+
+        // VEG SOUP
+        { id: "veg_manchurian_soup", name: "Veg Manchurian Soup", price_half: 100, price_full: null, category: "Veg Soup" },
+        { id: "veg_garlic_soup", name: "Veg Garlic Soup", price_half: 110, price_full: null, category: "Veg Soup" },
+        { id: "veg_ginger_soup", name: "Veg Ginger Soup", price_half: 110, price_full: null, category: "Veg Soup" },
+        { id: "veg_hot_sour_soup", name: "Veg Hot & Sour Soup", price_half: 120, price_full: null, category: "Veg Soup" },
+        { id: "veg_schezwan_soup", name: "Veg Schezwan Soup", price_half: 110, price_full: null, category: "Veg Soup" },
+        { id: "veg_ginger_garlic_soup", name: "Veg Ginger Garlic Soup", price_half: 120, price_full: null, category: "Veg Soup" },
+
+        // PANEER SPECIAL RICE
+        { id: "paneer_fried_rice", name: "Paneer Fried Rice", price_half: 100, price_full: 140, category: "Paneer Special Rice" },
+        { id: "paneer_schezwan_rice", name: "Paneer Schezwan Rice", price_half: 110, price_full: 150, category: "Paneer Special Rice" },
+        { id: "paneer_triple_rice", name: "Paneer Triple Rice", price_half: 120, price_full: 180, category: "Paneer Special Rice" },
+        { id: "paneer_chopper_rice", name: "Paneer Chopper Rice", price_half: 130, price_full: 210, category: "Paneer Special Rice" },
+        { id: "paneer_combination_rice", name: "Paneer Combination Rice", price_half: 110, price_full: 150, category: "Paneer Special Rice" },
+        { id: "paneer_sherpa_rice", name: "Paneer Sherpa Rice", price_half: null, price_full: 220, category: "Paneer Special Rice" },
+        { id: "paneer_hong_kong_rice", name: "Paneer Hong Kong Rice", price_half: 120, price_full: 170, category: "Paneer Special Rice" },
+        { id: "paneer_singapuri_rice", name: "Paneer Singapuri Rice", price_half: 120, price_full: 170, category: "Paneer Special Rice" },
+        { id: "paneer_chilli_rice", name: "Paneer Chilli Rice", price_half: 120, price_full: 170, category: "Paneer Special Rice" },
+
+        // PANEER SPECIAL NOODLE
+        { id: "paneer_fried_noodle", name: "Paneer Fried Noodle", price_half: 100, price_full: 140, category: "Paneer Special Noodle" },
+        { id: "paneer_schezwan_noodle", name: "Paneer Schezwan Noodle", price_half: 110, price_full: 150, category: "Paneer Special Noodle" },
+        { id: "paneer_triple_noodle", name: "Paneer Triple Noodle", price_half: 120, price_full: 180, category: "Paneer Special Noodle" },
+        { id: "paneer_chopper_noodle", name: "Paneer Chopper Noodle", price_half: 130, price_full: 210, category: "Paneer Special Noodle" },
+        { id: "paneer_combination_noodle", name: "Paneer Combination Noodle", price_half: 110, price_full: 150, category: "Paneer Special Noodle" },
+        { id: "paneer_sherpa_noodle", name: "Paneer Sherpa Noodle", price_half: null, price_full: 220, category: "Paneer Special Noodle" },
+        { id: "paneer_hong_kong_noodle", name: "Paneer Hong Kong Noodle", price_half: 120, price_full: 170, category: "Paneer Special Noodle" },
+        { id: "paneer_chilli_noodle", name: "Paneer Chilli Noodle", price_half: 120, price_full: 170, category: "Paneer Special Noodle" },
+        { id: "paneer_singapuri_noodle", name: "Paneer Singapuri Noodle", price_half: 120, price_full: 170, category: "Paneer Special Noodle" }
+    ];
+    
+    
+
+    // State
+    let currentTable = null;
+    let cart = JSON.parse(localStorage.getItem('demo_cart') || '[]');
+
+
+  // DOM elements
+  const menuRootVeg = document.getElementById('menu-root-veg');
+  const menuRootNonVeg = document.getElementById('menu-root-nonveg');
+  const cartEl = document.getElementById('cart');
+  const totalEl = document.getElementById('total');
+  const startBtn = document.getElementById('start-scan');
+  const stopBtn = document.getElementById('stop-scan');
+  const tableInfo = document.getElementById('table-info');
+  const libStatus = document.getElementById('lib-status');
+  const preloadBtn = document.getElementById('preload-lib');
+  const simulateInput = document.getElementById('simulate-input');
+  const simulateBtn = document.getElementById('simulate-scan');
+
+    // QR scanner instance (when loaded)
+    let html5QrCode = null;
+
+    // ---------------------
+    // Helper: dynamically load html5-qrcode library if needed
+    // ---------------------
+    function ensureHtml5QrcodeLoaded(timeoutMs = 10000){
+      return new Promise((resolve, reject) => {
+        if(window.Html5Qrcode){
+          libStatus.innerHTML = 'QR library: <strong>loaded</strong>';
+          resolve(window.Html5Qrcode);
+          return;
+        }
+
+        // If a script element with the CDN is already present, attach events
+        const existing = document.querySelector(`script[src="${HTML5_QR_CDN}"]`);
+        if(existing){
+          // attach handlers (in case it's still loading)
+          existing.addEventListener('load', ()=>{ libStatus.innerHTML = 'QR library: <strong>loaded</strong>'; resolve(window.Html5Qrcode); });
+          existing.addEventListener('error', ()=>{ libStatus.innerHTML = 'QR library: <strong style="color:red">failed</strong>'; reject(new Error('Failed to load html5-qrcode script')); });
+          // but if already complete
+          if(existing.readyState === 'complete' || existing.readyState === 'loaded'){
+            if(window.Html5Qrcode){ libStatus.innerHTML = 'QR library: <strong>loaded</strong>'; resolve(window.Html5Qrcode); }
+          }
+          return;
+        }
+
+        // create script tag and append to head
+        const s = document.createElement('script');
+        s.src = HTML5_QR_CDN;
+        s.async = true;
+        s.onload = () => {
+          if(window.Html5Qrcode){ libStatus.innerHTML = 'QR library: <strong>loaded</strong>'; resolve(window.Html5Qrcode); }
+          else { libStatus.innerHTML = 'QR library: <strong style="color:red">loaded but missing symbol</strong>'; reject(new Error('Library loaded but Html5Qrcode is not defined')) }
+        };
+        s.onerror = () => { libStatus.innerHTML = 'QR library: <strong style="color:red">failed</strong>'; reject(new Error('Failed to load html5-qrcode script')); };
+        document.head.appendChild(s);
+
+        // safety timeout
+        setTimeout(()=>{
+          if(!window.Html5Qrcode) reject(new Error('Timeout loading html5-qrcode'));
+        }, timeoutMs);
+      });
+    }
+
+    // ---------------------
+    // Menu & Cart rendering
+    // ---------------------
+
+    // Add to cart function
+    function addToCart(item) {
+      // Check if item with same id and variant exists
+      const idx = cart.findIndex(c => c.id === item.id && c.variant === item.variant);
+      if (idx > -1) {
+        cart[idx].qty += 1;
+      } else {
+        cart.push({ ...item, qty: 1 });
+      }
+      saveCart();
+      renderCart();
+    }
+
+    // Save cart to localStorage
+    function saveCart() {
+      localStorage.setItem('demo_cart', JSON.stringify(cart));
+    }
+
+    function renderMenu(){
+      // Render Veg
+      if(menuRootVeg) {
+        menuRootVeg.innerHTML = '';
+        MENU.filter(item => /veg/i.test(item.category)).forEach(item => {
+          const div = document.createElement('div');
+          div.className = 'menu-item';
+          div.innerHTML = `
+            <img src="${item.img || 'https://via.placeholder.com/64'}" alt="${item.name}">
+            <div class="meta">
+              <div style="font-weight:700">${item.name}</div>
+              <div class="small">Half: ₹${item.price_half} · Full: ₹${item.price_full}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <button class="btn" data-id="${item.id}" data-size="half">Half</button>
+              <button class="btn ghost" data-id="${item.id}" data-size="full">Full</button>
+            </div>
+          `;
+          menuRootVeg.appendChild(div);
+        });
+        menuRootVeg.querySelectorAll('button[data-id]').forEach(btn=>{
+          btn.addEventListener('click', ()=>{
+            const id = btn.getAttribute('data-id');
+            const size = btn.getAttribute('data-size');
+            const item = MENU.find(m=>m.id===id);
+            const price = size === 'half' ? item.price_half : item.price_full;
+            addToCart({...item, price, variant:size});
+          });
+        });
+      }
+      // Render Non Veg
+      if(menuRootNonVeg) {
+        menuRootNonVeg.innerHTML = '';
+        MENU.filter(item => /non veg/i.test(item.category) || /egg/i.test(item.category)).forEach(item => {
+          const div = document.createElement('div');
+          div.className = 'menu-item';
+          div.innerHTML = `
+            <img src="${item.img || 'https://via.placeholder.com/64'}" alt="${item.name}">
+            <div class="meta">
+              <div style="font-weight:700">${item.name}</div>
+              <div class="small">Half: ₹${item.price_half} · Full: ₹${item.price_full}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <button class="btn" data-id="${item.id}" data-size="half">Half</button>
+              <button class="btn ghost" data-id="${item.id}" data-size="full">Full</button>
+            </div>
+          `;
+          menuRootNonVeg.appendChild(div);
+        });
+        menuRootNonVeg.querySelectorAll('button[data-id]').forEach(btn=>{
+          btn.addEventListener('click', ()=>{
+            const id = btn.getAttribute('data-id');
+            const size = btn.getAttribute('data-size');
+            const item = MENU.find(m=>m.id===id);
+            const price = size === 'half' ? item.price_half : item.price_full;
+            addToCart({...item, price, variant:size});
+          });
+        });
+      }
+    }
+
+  function renderCart(){
+    cartEl.innerHTML = '';
+    let total = 0;
+    cart.forEach((c, idx)=>{
+      total += c.price * c.qty;
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <div style="flex:1">${c.name} (${c.variant}) <span class="small">x${c.qty}</span></div>
+        <div>₹${c.price*c.qty} 
+          <button data-idx="${idx}" style="margin-left:8px" class="btn ghost">-</button>
+        </div>
+      `;
+      cartEl.appendChild(li);
+    });
+    totalEl.textContent = total;
+
+    // attach remove buttons
+    cartEl.querySelectorAll('button[data-idx]').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        const i = Number(b.getAttribute('data-idx'));
+        if(cart[i].qty>1) cart[i].qty--;
+        else cart.splice(i,1);
+        saveCart(); renderCart();
+      });
+    });
+  }
+    document.getElementById('empty-cart').addEventListener('click', ()=>{ cart=[]; saveCart(); renderCart(); });
+
+    // --- Place order ---
+    document.getElementById('place-order').addEventListener('click', ()=>{
+      if(!currentTable){ alert('कृपया टेबलचा QR स्कॅन करा (Scan table QR)'); return; }
+      if(cart.length===0){ alert('Cart रिकामा आहे'); return; }
+
+      const orders = JSON.parse(localStorage.getItem('demo_orders') || '[]');
+      const order = {
+        id: 'ORD_' + Date.now(),
+        table: currentTable,
+        items: cart,
+        status: 'Pending',
+        createdAt: new Date().toISOString()
+      };
+      orders.push(order);
+      localStorage.setItem('demo_orders', JSON.stringify(orders));
+
+      cart = [];
+      saveCart(); renderCart();
+      renderKitchen();
+      alert('Order placed! Order ID: ' + order.id);
+    });
+
+    // --- Kitchen simulation ---
+    function renderKitchen(){
+      const ul = document.getElementById('kitchen-orders');
+      const orders = JSON.parse(localStorage.getItem('demo_orders') || '[]');
+      ul.innerHTML = '';
+      orders.slice().reverse().forEach(o=>{
+        const li = document.createElement('li');
+        li.style.listStyle='none';
+        li.innerHTML = `<div style="display:flex;justify-content:space-between;gap:12px"><div><strong>${o.id}</strong> · ${o.table}<div class='small'>${o.items.map(i=>i.name+' x'+i.qty).join(', ')}</div></div><div><select data-id='${o.id}'><option>${o.status}</option><option>Preparing</option><option>Ready</option><option>Served</option></select></div></div>`;
+        ul.appendChild(li);
+      });
+
+      // attach change handlers
+      ul.querySelectorAll('select[data-id]').forEach(s=>{
+        s.addEventListener('change', ()=>{
+          const id = s.getAttribute('data-id');
+          const orders = JSON.parse(localStorage.getItem('demo_orders') || '[]');
+          const ord = orders.find(x=>x.id===id);
+          if(ord){ ord.status = s.value; localStorage.setItem('demo_orders', JSON.stringify(orders)); renderKitchen(); }
+        });
+      });
+    }
+
+    document.getElementById('clear-orders').addEventListener('click', ()=>{ localStorage.removeItem('demo_orders'); renderKitchen(); });
+
+    // ---------------------
+    // QR scanner behaviour
+    // ---------------------
+    function onScanSuccess(decodedText){
+      // decodedText can be TABLE_1 or a full URL containing ?table=TABLE_1
+      console.log('QR:', decodedText);
+      let tableId = null;
+      if(/^TABLE_/i.test(decodedText)) tableId = decodedText;
+      else{
+        try{
+          const u = new URL(decodedText);
+          if(u.searchParams.has('table')) tableId = u.searchParams.get('table');
+        }catch(e){ /* not a URL */ }
+      }
+      if(!tableId) tableId = decodedText; // fallback
+
+      currentTable = tableId;
+      tableInfo.textContent = tableId;
+
+      // Auto-stop scanner (configurable) to avoid multiple triggers
+      if(html5QrCode){
+        html5QrCode.stop().then(()=>{
+          try{ html5QrCode.clear(); }catch(e){}
+          html5QrCode = null;
+          document.getElementById('reader').textContent = 'Scanner stopped (code received)';
+        }).catch(()=>{});
+      }
+    }
+
+    function onScanError(err){ console.warn('QR scan error', err); }
+
+    // Start scanner (lazy-load library if needed)
+    startBtn.addEventListener('click', async ()=>{
+      if(html5QrCode){ alert('Scanner already running'); return; }
+      startBtn.disabled = true; startBtn.textContent = 'Starting...';
+      try{
+        await ensureHtml5QrcodeLoaded();
+        // instantiate and start
+        html5QrCode = new Html5Qrcode('reader');
+        document.getElementById('reader').textContent = '';
+
+        // get cameras
+        let cameraArg = { facingMode: 'environment' };
+        try{
+          const cameras = await Html5Qrcode.getCameras();
+          if(cameras && cameras.length) cameraArg = cameras[0].id;
+        }catch(e){ console.warn('Could not enumerate cameras', e); }
+
+        await html5QrCode.start(cameraArg, { fps: 10, qrbox: 250 }, onScanSuccess, onScanError);
+        document.getElementById('reader').style.background = '#111';
+        document.getElementById('reader').textContent = 'Scanning...';
+      }catch(err){
+        alert('Cannot start scanner — ' + (err && err.message ? err.message : err));
+        console.error(err);
+      }finally{
+        startBtn.disabled = false; startBtn.textContent = 'Start Scanner';
+      }
+    });
+
+    // Stop scanner
+    stopBtn.addEventListener('click', async ()=>{
+      if(!html5QrCode){ alert('Scanner is not running'); return; }
+      try{
+        await html5QrCode.stop();
+        try{ await html5QrCode.clear(); }catch(e){}
+        html5QrCode = null;
+        document.getElementById('reader').textContent = 'Scanner stopped';
+      }catch(e){ console.error('Error stopping scanner', e); }
+    });
+
+    // Preload library button
+    preloadBtn.addEventListener('click', async ()=>{
+      preloadBtn.disabled = true; preloadBtn.textContent = 'Loading...';
+      try{ await ensureHtml5QrcodeLoaded(); }catch(e){ console.error(e); alert('Failed to load QR library: ' + e.message); }
+      preloadBtn.disabled = false; preloadBtn.textContent = 'Load QR library';
+    });
+
+    // Simulation helper
+    simulateBtn.addEventListener('click', ()=>{
+      const v = simulateInput.value.trim();
+      if(!v){ alert('Enter a sample payload to simulate'); return; }
+      onScanSuccess(v);
+    });
+
+    // --- On load ---
+    renderMenu(); renderCart(); renderKitchen();
+
+    // quick helper: show sample QR payloads for testing
+    console.log('Sample QR payloads: TABLE_1 , TABLE_2 or https://your.site/?table=TABLE_1');
+  </script>
+</body>
+</html>
